@@ -1,0 +1,576 @@
+{
+  "info": {
+    "_postman_id": "8f7e2d9b-4c12-48e3-b09a-7c85e4d6a1b2",
+    "name": "Clinical Encounter & Transcript Summarizer System",
+    "description": "Comprehensive Postman collection for testing Encounter Ingestion, Out-of-Order Versioning, Deduplication, AI Summarization, Redis Caching, HITL Diffing, Urgency Triage, Event Replay Reconciliation, DLQ Management, and Partner Event Streamer.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "encounter_base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "streamer_base_url",
+      "value": "http://localhost:8001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Webhook Ingestion (Encounter Updates)",
+      "item": [
+        {
+          "name": "Ingest Triage Note - Version 1 (Initial)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-101-v1\",\n  \"encounter_id\": \"enc-101\",\n  \"pId\": \"pat-101\",\n  \"version\": 1,\n  \"payload\": {\n    \"transcriptions\": \"Patient presenting with acute chest discomfort and shortness of breath for 1 hour. Vitals: BP 145/90, HR 98, Temp 98.4F. Oxygen given.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/webhook",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "webhook"
+              ]
+            },
+            "description": "Ingests initial version 1 triage encounter. Triggers AI summarization and stores latest state."
+          }
+        },
+        {
+          "name": "Ingest Out-of-Order Note - Version 3 (Arriving Before Version 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-101-v3\",\n  \"encounter_id\": \"enc-101\",\n  \"pId\": \"pat-101\",\n  \"version\": 3,\n  \"payload\": {\n    \"transcriptions\": \"ECG shows sinus tachycardia. Troponin negative. Nitroglycerin sublingual administered with symptom relief. Patient stabilized and transferred to observation unit.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/webhook",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "webhook"
+              ]
+            },
+            "description": "Simulates out-of-order version 3 arriving before version 2. Accepted as newest latest state (v3 > v1)."
+          }
+        },
+        {
+          "name": "Ingest Delayed Note - Version 2 (Stale Version Check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-101-v2\",\n  \"encounter_id\": \"enc-101\",\n  \"pId\": \"pat-101\",\n  \"version\": 2,\n  \"payload\": {\n    \"transcriptions\": \"Lab work ordered: Troponin, CBC, BMP. IV line placed in left forearm.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/webhook",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "webhook"
+              ]
+            },
+            "description": "Simulates delayed arrival of version 2 after version 3 was already processed. Stored in raw event log but returns 'ignored_stale_version' without overwriting latest state."
+          }
+        },
+        {
+          "name": "Ingest Duplicate Event ID (Idempotency Check)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-101-v1\",\n  \"encounter_id\": \"enc-101\",\n  \"pId\": \"pat-101\",\n  \"version\": 1,\n  \"payload\": {\n    \"transcriptions\": \"Duplicate delivery of initial triage note.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/webhook",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "webhook"
+              ]
+            },
+            "description": "Re-submits an already processed event_id ('evt-101-v1'). Returns 'ignored_duplicate' instantly."
+          }
+        },
+        {
+          "name": "Ingest Medication Refill Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-102-v1\",\n  \"encounter_id\": \"enc-102\",\n  \"pId\": \"pat-101\",\n  \"version\": 1,\n  \"payload\": {\n    \"transcriptions\": \"Patient requests 90-day refill for Metformin 500mg and Lisinopril 10mg. Doctor reviewed recent kidney function labs (eGFR > 60). Refill approved and transmitted to CVS pharmacy.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/webhook",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "webhook"
+              ]
+            },
+            "description": "Ingests a medication refill event for the same patient. Extracts structured medications."
+          }
+        },
+        {
+          "name": "Ingest Appointment Booking Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-103-v1\",\n  \"encounter_id\": \"enc-103\",\n  \"pId\": \"pat-101\",\n  \"version\": 1,\n  \"payload\": {\n    \"transcriptions\": \"Follow-up appointment with Dr. Smith in Cardiology requested. Scheduled for October 15th at 2:30 PM. Appointment confirmation SMS sent to patient.\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/webhook",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "webhook"
+              ]
+            },
+            "description": "Ingests appointment booking event."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Summary & Patient Queries (Redis Cached)",
+      "item": [
+        {
+          "name": "Get Encounter Summary by Encounter ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/getSummary/enc-101",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "getSummary",
+                "enc-101"
+              ]
+            },
+            "description": "Retrieves the latest summary, vitals, medications, and confidence for encounter enc-101. First call loads from MongoDB and populates Redis; subsequent calls hit Redis cache."
+          }
+        },
+        {
+          "name": "Get Patient Longitudinal History by Patient ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/patients/pat-101/summary",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "patients",
+                "pat-101",
+                "summary"
+              ]
+            },
+            "description": "Retrieves the aggregated longitudinal clinical history, active problems list, and current medications for patient pat-101 across all encounters."
+          }
+        },
+        {
+          "name": "Export Encounter Summary as HL7 FHIR R4 Bundle",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/enc-101/fhir",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "enc-101",
+                "fhir"
+              ]
+            },
+            "description": "Exports clinical encounter data as a standard HL7 FHIR R4 JSON Bundle including Encounter, Condition, and MedicationRequest resources."
+          }
+        },
+        {
+          "name": "Stream Encounter Summary in Real-Time (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/enc-101/stream",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "enc-101",
+                "stream"
+              ]
+            },
+            "description": "Streams LLM summary tokens live over Server-Sent Events (SSE text/event-stream)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Human-In-The-Loop & Operational Features",
+      "item": [
+        {
+          "name": "Get Pending Clinical Reviews (Urgency Prioritized - Critical Filter)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/pending-review?urgency=critical",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "pending-review"
+              ],
+              "query": [
+                {
+                  "key": "urgency",
+                  "value": "critical"
+                }
+              ]
+            },
+            "description": "Returns pending reviews filtered by critical clinical urgency (Feature 3c)."
+          }
+        },
+        {
+          "name": "Physician Override / Approve Summary",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"revised_summary\": \"Clinician Verified: 58-year-old presenting with atypical chest tightness. Serial troponins negative. Nitroglycerin gave relief. Discharge on ASA 81mg and cardiology outpatient follow-up.\",\n  \"revised_encounter_type\": \"triage\",\n  \"reviewed_by\": \"Dr. Emily Watson, MD (Cardiology)\"\n}"
+            },
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/enc-101/override-summary",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "enc-101",
+                "override-summary"
+              ]
+            },
+            "description": "Allows a clinician to review, edit, and approve an AI summary, computing unified text diffs and logging review feedback (Feature 3a)."
+          }
+        },
+        {
+          "name": "Get Clinical Review History & Diff (Feature 3a)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/enc-101/review-history",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "enc-101",
+                "review-history"
+              ]
+            },
+            "description": "Fetches audit logs and text diffs between original AI summary and clinician revisions."
+          }
+        },
+        {
+          "name": "Get Clinical Feedback Metrics (Feature 3a)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/feedback-metrics",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "feedback-metrics"
+              ]
+            },
+            "description": "Calculates clinician modification rates, acceptance metrics, and confidence distributions."
+          }
+        },
+        {
+          "name": "Reconcile Encounter Versions & Re-summarize (Feature 4a)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/encounters/enc-101/reconcile",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "encounters",
+                "enc-101",
+                "reconcile"
+              ]
+            },
+            "description": "Replays all raw versions in true order and recalculates the latest encounter and longitudinal summary."
+          }
+        },
+        {
+          "name": "List DLQ Failed Messages (Feature 4b)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/admin/dlq/messages",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "admin",
+                "dlq",
+                "messages"
+              ]
+            },
+            "description": "Inspects failed summarization jobs routed to the Dead-Letter Queue."
+          }
+        },
+        {
+          "name": "Get DLQ Operational Statistics (Feature 4b)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/admin/dlq/stats",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "admin",
+                "dlq",
+                "stats"
+              ]
+            },
+            "description": "Returns DLQ operational metrics and top error failure reasons."
+          }
+        },
+        {
+          "name": "Retry Failed Message from DLQ (Feature 4b)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/admin/dlq/retry/enc-101",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "admin",
+                "dlq",
+                "retry",
+                "enc-101"
+              ]
+            },
+            "description": "Re-processes a failed message from DLQ and marks it resolved."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Event Streamer Microservice",
+      "item": [
+        {
+          "name": "Start Synthetic Event Stream Simulation (HTTP Webhook)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"num_encounters\": 3,\n  \"events_per_encounter\": 3,\n  \"duplicate_probability\": 0.20,\n  \"out_of_order_probability\": 0.30,\n  \"delay_ms\": 250\n}"
+            },
+            "url": {
+              "raw": "{{streamer_base_url}}/stream/start",
+              "host": [
+                "{{streamer_base_url}}"
+              ],
+              "path": [
+                "stream",
+                "start"
+              ]
+            },
+            "description": "Triggers the event streamer to generate synthetic encounter events with injected duplicates and out-of-order versions, streaming them via HTTP to /webhook."
+          }
+        },
+        {
+          "name": "Start Synthetic Event Stream Simulation (Kafka Direct)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"num_encounters\": 3,\n  \"events_per_encounter\": 3,\n  \"duplicate_probability\": 0.20,\n  \"out_of_order_probability\": 0.30,\n  \"delay_ms\": 250\n}"
+            },
+            "url": {
+              "raw": "{{streamer_base_url}}/stream/kafka/start",
+              "host": [
+                "{{streamer_base_url}}"
+              ],
+              "path": [
+                "stream",
+                "kafka",
+                "start"
+              ]
+            },
+            "description": "Triggers the event streamer to stream synthetic encounter events directly into the Kafka topic 'encounter-events'."
+          }
+        },
+        {
+          "name": "Streamer Send Single Custom Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event_id\": \"evt-custom-99\",\n  \"encounter_id\": \"enc-99\",\n  \"pId\": \"pat-99\",\n  \"version\": 1,\n  \"transcription\": \"Custom manual simulation: Patient reports seasonal allergy flare-up with sneezing and congestion. Cetirizine 10mg recommended.\"\n}"
+            },
+            "url": {
+              "raw": "{{streamer_base_url}}/stream/send-single",
+              "host": [
+                "{{streamer_base_url}}"
+              ],
+              "path": [
+                "stream",
+                "send-single"
+              ]
+            },
+            "description": "Dispatches a single manual custom encounter event through the streamer service."
+          }
+        },
+        {
+          "name": "Streamer Service Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{streamer_base_url}}/stream/status",
+              "host": [
+                "{{streamer_base_url}}"
+              ],
+              "path": [
+                "stream",
+                "status"
+              ]
+            },
+            "description": "Checks the operational status of the Event Streamer service."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Health Checks",
+      "item": [
+        {
+          "name": "Encounter Service Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{encounter_base_url}}/health",
+              "host": [
+                "{{encounter_base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Event Streamer Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{streamer_base_url}}/health",
+              "host": [
+                "{{streamer_base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

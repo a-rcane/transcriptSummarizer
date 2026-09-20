@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.idea/
+.vscode/
+*.log
+mongo_data/
+kafka_data/
+.pytest_cache/
+.coverage
+htmlcov/

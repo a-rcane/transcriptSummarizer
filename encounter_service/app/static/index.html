@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clinical Documentation Intelligence System | EHR Transcription Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-body: #0b0f17;
+      --bg-surface: #111827;
+      --bg-card: #162032;
+      --bg-card-subtle: #1a263c;
+      --bg-input: #0e1626;
+      --border-color: #24324a;
+      --border-focus: #3b82f6;
+      
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      
+      --brand: #2563eb;
+      --brand-hover: #1d4ed8;
+      --brand-light: rgba(37, 99, 235, 0.12);
+      
+      --critical: #ef4444;
+      --critical-bg: rgba(239, 68, 68, 0.12);
+      --urgent: #f59e0b;
+      --urgent-bg: rgba(245, 158, 11, 0.12);
+      --routine: #10b981;
+      --routine-bg: rgba(16, 185, 129, 0.12);
+      --info: #0284c7;
+      --info-bg: rgba(2, 132, 199, 0.12);
+
+      --radius: 6px;
+      --radius-sm: 4px;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-body);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-body); }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    /* Top Utility Header */
+    header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.6rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .sys-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #ffffff;
+    }
+
+    .sys-logo svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: var(--brand);
+      stroke-width: 2.2;
+    }
+
+    .sys-dept {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-left: 1px solid var(--border-color);
+      padding-left: 0.75rem;
+    }
+
+    .header-status-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .sys-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .status-indicator {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--routine);
+    }
+
+    .status-indicator.error {
+      background: var(--critical);
+    }
+
+    /* Primary Navigation */
+    nav.nav-bar {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      padding: 0 1.5rem;
+      gap: 0.25rem;
+      overflow-x: auto;
+    }
+
+    .nav-tab {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: color 0.15s ease, border-color 0.15s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .nav-tab:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-tab.active {
+      color: #ffffff;
+      border-bottom-color: var(--brand);
+      font-weight: 600;
+    }
+
+    /* Main Content Area */
+    main {
+      flex: 1;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    .tab-view {
+      display: none;
+    }
+
+    .tab-view.active {
+      display: block;
+    }
+
+    /* Layout Containers */
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1.25rem;
+    }
+
+    .row-equal {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    .row-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    @media (max-width: 1024px) {
+      .row-2, .row-equal, .row-3 { grid-template-columns: 1fr; }
+    }
+
+    /* Clinical Cards */
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .panel-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    /* Form Controls */
+    .form-row {
+      margin-bottom: 0.9rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.02em;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.55rem 0.75rem;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.85rem;
+      transition: border-color 0.15s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--border-focus);
+    }
+
+    textarea {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      background: var(--brand);
+      color: #ffffff;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 1rem;
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn:hover {
+      background: var(--brand-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card-subtle);
+      border-color: var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .btn-secondary:hover {
+      background: #22324e;
+      border-color: #3b4d6b;
+    }
+
+    .btn-sm {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.75rem;
+    }
+
+    .btn-success {
+      background: #059669;
+    }
+    .btn-success:hover {
+      background: #047857;
+    }
+
+    /* Clinical Tags / Badges */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .tag-critical { background: var(--critical-bg); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .tag-urgent { background: var(--urgent-bg); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .tag-routine { background: var(--routine-bg); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .tag-info { background: var(--info-bg); color: #7dd3fc; border: 1px solid rgba(2, 132, 199, 0.3); }
+    .tag-neutral { background: var(--bg-card-subtle); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
+    /* Vitals Telemetry Box */
+    .vitals-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 0.5rem;
+      margin: 0.9rem 0;
+    }
+
+    .vital-cell {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem;
+      text-align: center;
+    }
+
+    .vital-num {
+      font-family: var(--font-mono);
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .vital-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+      letter-spacing: 0.04em;
+    }
+
+    /* Structured Clinical Tables */
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+    }
+
+    table.data-table th {
+      text-align: left;
+      padding: 0.5rem 0.6rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    table.data-table td {
+      padding: 0.6rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: var(--text-primary);
+    }
+
+    table.data-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Metric Counters */
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 0.9rem 1.1rem;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .stat-value {
+      font-family: var(--font-mono);
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #ffffff;
+      margin-top: 0.2rem;
+    }
+
+    /* Live Output Box */
+    .console-box {
+      background: #090d14;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 1rem;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #7dd3fc;
+      min-height: 160px;
+      max-height: 320px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    /* Diff Highlight */
+    .diff-line-add {
+      background: rgba(16, 185, 129, 0.15);
+      color: #a7f3d0;
+      padding: 1px 4px;
+      display: block;
+    }
+
+    .diff-line-del {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      padding: 1px 4px;
+      display: block;
+    }
+
+    /* Dialog / Modal */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal-window {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      width: 90%;
+      max-width: 680px;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+
+    /* Toast System */
+    #toast-host {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toast-msg {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--brand);
+      border-radius: var(--radius-sm);
+      padding: 0.6rem 1rem;
+      font-size: 0.8rem;
+      color: var(--text-primary);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top System Bar -->
+  <header>
+    <div class="header-left">
+      <div class="sys-logo">
+        <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>EHR Clinical Intelligence System</span>
+      </div>
+      <span class="sys-dept">Inpatient & Ambulatory Transcription Service</span>
+    </div>
+
+    <div class="header-status-bar">
+      <div class="sys-pill">
+        <span class="status-indicator" id="llm-indicator"></span>
+        <span>LLM: Qwen2.5-Coder:7b</span>
+      </div>
+      <div class="sys-pill">
+        <span class="status-indicator" id="api-indicator"></span>
+        <span id="api-label">Host: Port 8000</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="checkSystemHealth()">Ping Services</button>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav class="nav-bar">
+    <button class="nav-tab active" onclick="setTab('ingest')">Encounter Ingestion</button>
+    <button class="nav-tab" onclick="setTab('chart')">Patient Chart & Summary</button>
+    <button class="nav-tab" onclick="setTab('stream')">Dictation Token Stream</button>
+    <button class="nav-tab" onclick="setTab('qa')">Physician Attestation Queue</button>
+    <button class="nav-tab" onclick="setTab('admin')">Event Replay & DLQ Audit</button>
+  </nav>
+
+  <!-- Main View Area -->
+  <main>
+
+    <!-- SECTION 1: Encounter Ingestion -->
+    <div id="view-ingest" class="tab-view active">
+      <div class="row-2">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Inbound Note Dispatcher (/webhook)</span>
+            <select id="preset-select" onchange="applyPreset()" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+              <option value="triage-v1">Scenario: Acute Chest Discomfort (v1 Initial)</option>
+              <option value="triage-v3">Scenario: ECG Sinus Tachycardia (v3 Out-of-Order)</option>
+              <option value="triage-v2">Scenario: Lab Orders Inbound (v2 Delayed Arrival)</option>
+              <option value="refill">Scenario: Metformin 500mg Refill Request</option>
+              <option value="booking">Scenario: Cardiology Follow-Up Booking</option>
+            </select>
+          </div>
+
+          <form id="form-ingest" onsubmit="submitNote(event)">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-row">
+                <label for="inp-event-id">Event ID</label>
+                <input type="text" id="inp-event-id" value="evt-101-v1" required>
+              </div>
+              <div class="form-row">
+                <label for="inp-enc-id">Encounter Number</label>
+                <input type="text" id="inp-enc-id" value="enc-101" required>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-row">
+                <label for="inp-pid">Medical Record Number (pId)</label>
+                <input type="text" id="inp-pid" value="pat-101" required>
+              </div>
+              <div class="form-row">
+                <label for="inp-version">Version Sequence</label>
+                <input type="number" id="inp-version" value="1" min="1" required>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <label for="inp-transcript">Transcription / Clinical Narrative</label>
+              <textarea id="inp-transcript" rows="4" required>Patient presenting with acute chest discomfort and shortness of breath for 1 hour. Vitals: BP 145/90, HR 98, Temp 98.4F. Oxygen given.</textarea>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+              <button type="submit" class="btn" id="btn-submit-ingest">Submit Encounter Note</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Ingestion Engine Feedback</span>
+            <span id="badge-ingest-status" class="tag tag-neutral">Idle</span>
+          </div>
+
+          <div id="ingest-ack-box" style="margin-bottom: 1rem;">
+            <div style="color: var(--text-muted); font-size: 0.8rem; padding: 2.5rem 0; text-align: center;">
+              Submit an encounter record to inspect version verification, deduplication, and Kafka message routing.
+            </div>
+          </div>
+
+          <div id="auto-summary-box" style="display: none; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.9rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+              <span id="auto-enc-type" class="tag tag-info">TRIAGE</span>
+              <span id="auto-urgency" class="tag tag-routine">ROUTINE</span>
+            </div>
+            <p id="auto-summary-text" style="font-size: 0.85rem; line-height: 1.5; color: var(--text-primary);"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Patient Chart & Longitudinal Record -->
+    <div id="view-chart" class="tab-view">
+      <div class="panel" style="padding: 0.9rem 1.25rem;">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <input type="text" id="query-id" placeholder="Encounter ID (e.g. enc-101) or Patient MRN (e.g. pat-101)" value="enc-101" style="flex: 1;">
+          <button class="btn" onclick="queryEncounterChart()">Search Encounter</button>
+          <button class="btn btn-secondary" onclick="queryPatientChart()">Search Patient History</button>
+          <button class="btn btn-secondary" onclick="openFHIRModal()">Export HL7 FHIR</button>
+        </div>
+      </div>
+
+      <div class="row-2">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Longitudinal Clinical Assessment</span>
+            <span id="chart-urgency-tag" class="tag tag-routine">ROUTINE</span>
+          </div>
+
+          <p id="chart-narrative" style="font-size: 0.85rem; line-height: 1.6; color: var(--text-primary); margin-bottom: 0.9rem;">
+            No chart record selected.
+          </p>
+
+          <div class="vitals-bar" id="chart-vitals-bar">
+            <div class="vital-cell"><div class="vital-num" id="v-bp">--</div><div class="vital-title">BP (mmHg)</div></div>
+            <div class="vital-cell"><div class="vital-num" id="v-hr">--</div><div class="vital-title">HR (bpm)</div></div>
+            <div class="vital-cell"><div class="vital-num" id="v-temp">--</div><div class="vital-title">Temp (°F)</div></div>
+            <div class="vital-cell"><div class="vital-num" id="v-o2">--</div><div class="vital-title">SpO2</div></div>
+          </div>
+
+          <div style="background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; margin-top: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.4rem;">
+              <span style="color: var(--text-secondary);">AI Extraction Confidence</span>
+              <span id="metric-confidence-pct" style="font-family: var(--font-mono); font-weight: 600;">--</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; font-size: 0.7rem; color: var(--text-muted); text-align: center;">
+              <div>Extraction: <span id="conf-extract" style="color: var(--text-primary); font-family: var(--font-mono);">--</span></div>
+              <div>Diagnosis: <span id="conf-diag" style="color: var(--text-primary); font-family: var(--font-mono);">--</span></div>
+              <div>Ambiguity: <span id="conf-ambig" style="color: var(--text-primary); font-family: var(--font-mono);">--</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Active Problem List</span>
+            </div>
+            <div id="chart-problems-list" style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
+              <span style="color: var(--text-muted); font-size: 0.8rem;">No active conditions recorded.</span>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <span class="panel-title">Current Medications & Orders</span>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Medication</th>
+                  <th>Dose / Schedule</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="chart-meds-tbody">
+                <tr><td colspan="3" style="color: var(--text-muted); text-align: center;">No medications logged</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 3: Live Dictation Stream -->
+    <div id="view-stream" class="tab-view">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Live Dictation Summary (Server-Sent Events)</span>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <input type="text" id="stream-target-id" value="enc-101" style="width: 140px; padding: 0.3rem 0.5rem; font-size: 0.8rem;">
+            <button class="btn btn-sm" id="btn-stream-exec" onclick="execDictationStream()">Connect SSE</button>
+            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('stream-console').innerText=''">Clear</button>
+          </div>
+        </div>
+        <div class="console-box" id="stream-console">Click "Connect SSE" to initiate real-time chunk-by-chunk LLM token generation from Ollama.</div>
+      </div>
+    </div>
+
+    <!-- SECTION 4: Physician Attestation Queue -->
+    <div id="view-qa" class="tab-view">
+      <div class="row-3" style="margin-bottom: 1.25rem;">
+        <div class="stat-card">
+          <div class="stat-label">Total Chart Reviews</div>
+          <div class="stat-value" id="qa-total-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Clinician Modification Rate</div>
+          <div class="stat-value" id="qa-mod-rate">0.0%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Approved Without Modification</div>
+          <div class="stat-value" id="qa-unmodified-count">0</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Unattested Encounter Queue</span>
+          <div style="display: flex; gap: 0.4rem;">
+            <button class="btn btn-secondary btn-sm" onclick="fetchReviewQueue()">All Acuities</button>
+            <button class="btn btn-secondary btn-sm" onclick="fetchReviewQueue('critical')">Critical</button>
+            <button class="btn btn-secondary btn-sm" onclick="fetchReviewQueue('urgent')">Urgent</button>
+            <button class="btn btn-secondary btn-sm" onclick="fetchReviewQueue('routine')">Routine</button>
+          </div>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Encounter</th>
+              <th>Patient MRN</th>
+              <th>Acuity Tier</th>
+              <th>Confidence</th>
+              <th>AI Draft Summary</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="qa-queue-tbody">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading attestation queue...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECTION 5: Event Replay & DLQ Audit -->
+    <div id="view-admin" class="tab-view">
+      <div class="row-equal">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Event Sourcing Replay & Reconciliation</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.9rem;">
+            Reconstructs true encounter state by chronologically ordering all versions from the immutable <code style="font-family: var(--font-mono); color: #93c5fd;">encounter_events</code> store.
+          </p>
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <input type="text" id="inp-reconcile-id" value="enc-101" placeholder="Encounter ID">
+            <button class="btn" onclick="executeReconciliation()">Reconcile Log</button>
+          </div>
+          <div id="reconcile-ack-box" style="display: none; background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; font-size: 0.8rem;"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Synthetic Partner Stream Generator</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.9rem;">
+            Simulate realistic partner traffic with configurable latency, version jitter, and collision ratios.
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.9rem;">
+            <div>
+              <label>Encounters: <strong id="lbl-enc-count">5</strong></label>
+              <input type="range" id="sim-enc-count" min="1" max="20" value="5" oninput="document.getElementById('lbl-enc-count').innerText=this.value">
+            </div>
+            <div>
+              <label>Versions/Enc: <strong id="lbl-ver-count">3</strong></label>
+              <input type="range" id="sim-ver-count" min="1" max="5" value="3" oninput="document.getElementById('lbl-ver-count').innerText=this.value">
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn" onclick="dispatchSimulation('http')">Dispatch HTTP Stream</button>
+            <button class="btn btn-secondary" onclick="dispatchSimulation('kafka')">Emit Direct to Kafka</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Dead-Letter Queue (DLQ) Audit Log</span>
+          <button class="btn btn-secondary btn-sm" onclick="fetchDLQEntries()">Refresh Log</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Encounter</th>
+              <th>Patient</th>
+              <th>Status</th>
+              <th>Failure Cause</th>
+              <th>Timestamp</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dlq-tbody">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No DLQ records located.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Attestation Modal -->
+  <div class="modal-backdrop" id="qa-modal">
+    <div class="modal-window">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color);">
+        <span style="font-weight: 600; font-size: 0.95rem;">Physician Attestation & Summary Revision</span>
+        <button class="btn btn-secondary btn-sm" onclick="closeAttestationModal()">✕</button>
+      </div>
+
+      <div class="form-row">
+        <label>AI Draft Summary</label>
+        <div id="modal-ai-draft" style="background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.65rem; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;"></div>
+      </div>
+
+      <div class="form-row">
+        <label for="modal-clinician-edit">Attested Clinical Narrative</label>
+        <textarea id="modal-clinician-edit" rows="4"></textarea>
+      </div>
+
+      <div class="form-row">
+        <label for="modal-signee">Attesting Clinician (Name / Credential)</label>
+        <input type="text" id="modal-signee" value="Dr. Emily Watson, MD (Cardiology)">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+        <button class="btn btn-secondary" onclick="closeAttestationModal()">Cancel</button>
+        <button class="btn btn-success" onclick="submitAttestation()">Sign & Save Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FHIR Modal -->
+  <div class="modal-backdrop" id="fhir-modal">
+    <div class="modal-window" style="max-width: 800px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-color);">
+        <span style="font-weight: 600; font-size: 0.95rem;">HL7 FHIR R4 JSON Bundle (Encounter, Conditions, MedicationRequests)</span>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('fhir-modal').classList.remove('open')">✕</button>
+      </div>
+      <pre id="fhir-code-view" style="background: #090d14; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.85rem; font-family: var(--font-mono); font-size: 0.75rem; color: #7dd3fc; max-height: 480px; overflow-y: auto; white-space: pre-wrap;"></pre>
+    </div>
+  </div>
+
+  <!-- Toast Feed -->
+  <div id="toast-host"></div>
+
+  <script>
+    const API_BASE = window.location.origin;
+    const STREAMER_BASE = 'http://localhost:8001';
+
+    let activeQAEncounterId = null;
+
+    function toast(message, isSuccess = true) {
+      const host = document.getElementById('toast-host');
+      const div = document.createElement('div');
+      div.className = 'toast-msg';
+      div.style.borderLeftColor = isSuccess ? 'var(--brand)' : 'var(--critical)';
+      div.innerText = message;
+      host.appendChild(div);
+      setTimeout(() => div.remove(), 3500);
+    }
+
+    function setTab(tabName) {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+
+      const tabs = Array.from(document.querySelectorAll('.nav-tab'));
+      const activeBtn = tabs.find(t => t.getAttribute('onclick').includes(tabName));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      const activeView = document.getElementById(`view-${tabName}`);
+      if (activeView) activeView.classList.add('active');
+
+      if (tabName === 'qa') {
+        fetchReviewQueue();
+        fetchFeedbackStats();
+      } else if (tabName === 'admin') {
+        fetchDLQEntries();
+      }
+    }
+
+    async function checkSystemHealth() {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+        if (data.status === 'ok') {
+          document.getElementById('api-indicator').className = 'status-indicator';
+          document.getElementById('api-label').innerText = 'Host: Online (8000)';
+          toast('Services operational', true);
+        }
+      } catch {
+        document.getElementById('api-indicator').className = 'status-indicator error';
+        document.getElementById('api-label').innerText = 'Host: Offline';
+        toast('Connection failed', false);
+      }
+    }
+
+    function applyPreset() {
+      const key = document.getElementById('preset-select').value;
+      const presets = {
+        'triage-v1': {
+          evt: 'evt-101-v1', enc: 'enc-101', pid: 'pat-101', ver: 1,
+          txt: 'Patient presenting with acute chest discomfort and shortness of breath for 1 hour. Vitals: BP 145/90, HR 98, Temp 98.4F. Oxygen given.'
+        },
+        'triage-v3': {
+          evt: 'evt-101-v3', enc: 'enc-101', pid: 'pat-101', ver: 3,
+          txt: 'ECG shows sinus tachycardia. Troponin negative. Nitroglycerin sublingual administered with symptom relief. Patient stabilized and transferred to observation unit.'
+        },
+        'triage-v2': {
+          evt: 'evt-101-v2', enc: 'enc-101', pid: 'pat-101', ver: 2,
+          txt: 'Lab work ordered: Troponin, CBC, BMP. IV line placed in left forearm.'
+        },
+        'refill': {
+          evt: 'evt-102-v1', enc: 'enc-102', pid: 'pat-101', ver: 1,
+          txt: 'Patient requests 90-day refill for Metformin 500mg and Lisinopril 10mg. Doctor reviewed recent kidney function labs (eGFR > 60). Refill approved and transmitted to CVS pharmacy.'
+        },
+        'booking': {
+          evt: 'evt-103-v1', enc: 'enc-103', pid: 'pat-101', ver: 1,
+          txt: 'Follow-up appointment with Dr. Smith in Cardiology requested. Scheduled for October 15th at 2:30 PM. Appointment confirmation SMS sent to patient.'
+        }
+      };
+      const p = presets[key];
+      if (p) {
+        document.getElementById('inp-event-id').value = p.evt;
+        document.getElementById('inp-enc-id').value = p.enc;
+        document.getElementById('inp-pid').value = p.pid;
+        document.getElementById('inp-version').value = p.ver;
+        document.getElementById('inp-transcript').value = p.txt;
+      }
+    }
+
+    async function submitNote(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-ingest');
+      btn.innerText = 'Dispatching...';
+      btn.disabled = true;
+
+      const payload = {
+        event_id: document.getElementById('inp-event-id').value.trim(),
+        encounter_id: document.getElementById('inp-enc-id').value.trim(),
+        pId: document.getElementById('inp-pid').value.trim(),
+        version: parseInt(document.getElementById('inp-version').value),
+        payload: {
+          transcriptions: document.getElementById('inp-transcript').value.trim()
+        }
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/webhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        const badge = document.getElementById('badge-ingest-status');
+        badge.innerText = data.status.toUpperCase();
+        badge.className = `tag ${data.status === 'accepted' ? 'tag-routine' : data.status === 'ignored_duplicate' ? 'tag-urgent' : 'tag-info'}`;
+
+        document.getElementById('ingest-ack-box').innerHTML = `
+          <div style="background: var(--bg-input); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.75rem; font-size: 0.8rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+              <strong style="color: var(--text-primary);">Response: ${data.status}</strong>
+              <span style="color: var(--text-muted); font-family: var(--font-mono);">Sequence v${data.version}</span>
+            </div>
+            <p style="color: var(--text-secondary);">${data.message}</p>
+          </div>
+        `;
+
+        toast(`Ingested ${payload.event_id}: ${data.status}`, data.status === 'accepted');
+
+        setTimeout(() => {
+          pollSummaryUpdate(payload.encounter_id);
+        }, 1200);
+
+      } catch {
+        toast('Failed to reach webhook endpoint', false);
+      } finally {
+        btn.innerText = 'Submit Encounter Note';
+        btn.disabled = false;
+      }
+    }
+
+    async function pollSummaryUpdate(encId) {
+      try {
+        const res = await fetch(`${API_BASE}/getSummary/${encId}`);
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('auto-summary-box').style.display = 'block';
+          document.getElementById('auto-summary-text').innerText = data.last_encounter_summary || data.complete_summary;
+          document.getElementById('auto-urgency').innerText = (data.urgency_level || 'ROUTINE').toUpperCase();
+          document.getElementById('auto-enc-type').innerText = (data.encounter_type || 'TRIAGE').toUpperCase();
+        }
+      } catch {}
+    }
+
+    async function queryEncounterChart() {
+      const id = document.getElementById('query-id').value.trim();
+      if (!id) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/getSummary/${id}`);
+        if (!res.ok) {
+          toast('Encounter record not found', false);
+          return;
+        }
+        const data = await res.json();
+        renderChartData(data);
+        toast(`Loaded encounter ${id}`);
+      } catch {
+        toast('Encounter query failed', false);
+      }
+    }
+
+    async function queryPatientChart() {
+      const val = document.getElementById('query-id').value.trim();
+      const pId = val.startsWith('enc-') ? val.replace('enc-', 'pat-') : val;
+
+      try {
+        const res = await fetch(`${API_BASE}/patients/${pId}/summary`);
+        if (!res.ok) {
+          toast('Patient record not found', false);
+          return;
+        }
+        const data = await res.json();
+        renderChartData(data);
+        toast(`Loaded longitudinal history for ${pId}`);
+      } catch {
+        toast('Patient query failed', false);
+      }
+    }
+
+    function renderChartData(data) {
+      document.getElementById('chart-narrative').innerText = data.complete_summary || data.last_encounter_summary || 'No narrative found.';
+      const urg = (data.urgency_level || 'ROUTINE').toUpperCase();
+      const uTag = document.getElementById('chart-urgency-tag');
+      uTag.innerText = urg;
+      uTag.className = `tag ${urg === 'CRITICAL' ? 'tag-critical' : urg === 'URGENT' ? 'tag-urgent' : 'tag-routine'}`;
+
+      // Confidence
+      const pct = Math.round((data.confidence_score || 1.0) * 100);
+      document.getElementById('metric-confidence-pct').innerText = `${pct}%`;
+
+      if (data.confidence_breakdown) {
+        document.getElementById('conf-extract').innerText = data.confidence_breakdown.extraction_confidence;
+        document.getElementById('conf-diag').innerText = data.confidence_breakdown.diagnosis_confidence;
+        document.getElementById('conf-ambig').innerText = data.confidence_breakdown.ambiguity_risk;
+      }
+
+      // Problems
+      const probHost = document.getElementById('chart-problems-list');
+      if (data.active_problems && data.active_problems.length > 0) {
+        probHost.innerHTML = data.active_problems.map(p => `<span class="tag tag-info">${p}</span>`).join('');
+      } else {
+        probHost.innerHTML = `<span style="color: var(--text-muted); font-size: 0.8rem;">No active conditions recorded.</span>`;
+      }
+
+      // Meds
+      const mBody = document.getElementById('chart-meds-tbody');
+      if (data.current_medications && data.current_medications.length > 0) {
+        mBody.innerHTML = data.current_medications.map(m => `
+          <tr>
+            <td><strong>${m.name}</strong></td>
+            <td style="font-family: var(--font-mono);">${m.dose || '-'}</td>
+            <td><span class="tag tag-routine">${m.action}</span></td>
+          </tr>
+        `).join('');
+      } else {
+        mBody.innerHTML = `<tr><td colspan="3" style="color: var(--text-muted); text-align: center;">No medications logged</td></tr>`;
+      }
+    }
+
+    // SSE Stream
+    let sseClient = null;
+    function execDictationStream() {
+      const encId = document.getElementById('stream-target-id').value.trim();
+      const consoleBox = document.getElementById('stream-console');
+      consoleBox.innerText = '';
+
+      const btn = document.getElementById('btn-stream-exec');
+      btn.innerText = 'Streaming...';
+      btn.disabled = true;
+
+      if (sseClient) sseClient.close();
+      sseClient = new EventSource(`${API_BASE}/encounters/${encId}/stream`);
+
+      sseClient.onmessage = (evt) => {
+        if (evt.data === '[DONE]') {
+          sseClient.close();
+          btn.innerText = 'Connect SSE';
+          btn.disabled = false;
+          toast('Stream closed', true);
+          return;
+        }
+        consoleBox.innerText += evt.data;
+        consoleBox.scrollTop = consoleBox.scrollHeight;
+      };
+
+      sseClient.onerror = () => {
+        sseClient.close();
+        btn.innerText = 'Connect SSE';
+        btn.disabled = false;
+      };
+    }
+
+    // Attestation QA
+    async function fetchReviewQueue(tier = null) {
+      const tbody = document.getElementById('qa-queue-tbody');
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1rem;">Querying queue...</td></tr>`;
+
+      try {
+        const endpoint = tier ? `${API_BASE}/encounters/pending-review?urgency=${tier}` : `${API_BASE}/encounters/pending-review`;
+        const res = await fetch(endpoint);
+        const list = await res.json();
+
+        if (!list || list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">All encounter notes attested. No backlog.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = list.map(enc => {
+          const u = (enc.urgency_level || 'routine').toUpperCase();
+          const tClass = u === 'CRITICAL' ? 'tag-critical' : u === 'URGENT' ? 'tag-urgent' : 'tag-routine';
+          return `
+            <tr>
+              <td><strong>${enc.encounter_id}</strong></td>
+              <td style="font-family: var(--font-mono);">${enc.pId}</td>
+              <td><span class="tag ${tClass}">${u}</span></td>
+              <td style="font-family: var(--font-mono);">${Math.round((enc.confidence_score || 1.0) * 100)}%</td>
+              <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${enc.last_encounter_summary || enc.complete_summary}</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="openAttestationModal('${enc.encounter_id}', '${encodeURIComponent(enc.last_encounter_summary || enc.complete_summary)}')">Attest</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--critical); padding: 1rem;">Failed to retrieve queue.</td></tr>`;
+      }
+    }
+
+    async function fetchFeedbackStats() {
+      try {
+        const res = await fetch(`${API_BASE}/encounters/feedback-metrics`);
+        if (res.ok) {
+          const d = await res.json();
+          document.getElementById('qa-total-count').innerText = d.total_reviewed_encounters;
+          document.getElementById('qa-mod-rate').innerText = `${d.clinician_modification_rate_pct}%`;
+          document.getElementById('qa-unmodified-count').innerText = d.approved_unmodified_count;
+        }
+      } catch {}
+    }
+
+    function openAttestationModal(encId, encodedText) {
+      activeQAEncounterId = encId;
+      const text = decodeURIComponent(encodedText);
+      document.getElementById('modal-ai-draft').innerText = text;
+      document.getElementById('modal-clinician-edit').value = text;
+      document.getElementById('qa-modal').classList.add('open');
+    }
+
+    function closeAttestationModal() {
+      document.getElementById('qa-modal').classList.remove('open');
+    }
+
+    async function submitAttestation() {
+      if (!activeQAEncounterId) return;
+
+      const body = {
+        revised_summary: document.getElementById('modal-clinician-edit').value.trim(),
+        reviewed_by: document.getElementById('modal-signee').value.trim()
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/encounters/${activeQAEncounterId}/override-summary`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (res.ok) {
+          toast(`Encounter ${activeQAEncounterId} attested successfully`);
+          closeAttestationModal();
+          fetchReviewQueue();
+          fetchFeedbackStats();
+        } else {
+          toast('Attestation save failed', false);
+        }
+      } catch {
+        toast('Connection error', false);
+      }
+    }
+
+    // Reconcile
+    async function executeReconciliation() {
+      const encId = document.getElementById('inp-reconcile-id').value.trim();
+      const ack = document.getElementById('reconcile-ack-box');
+      ack.style.display = 'block';
+      ack.innerHTML = 'Replaying raw event log...';
+
+      try {
+        const res = await fetch(`${API_BASE}/encounters/${encId}/reconcile`, { method: 'POST' });
+        if (res.ok) {
+          const d = await res.json();
+          ack.innerHTML = `
+            <div style="color: var(--routine); font-weight: 600; margin-bottom: 0.3rem;">✓ Reconciliation Completed</div>
+            <div>Ordered Versions Replayed: <strong>[${d.versions_replayed.join(', ')}]</strong> (Total: ${d.total_versions_replayed})</div>
+            <div style="margin-top: 0.3rem; color: var(--text-secondary);">State Narrative: ${d.reconciled_summary.complete_summary}</div>
+          `;
+          toast(`Reconciled ${encId}`);
+        } else {
+          ack.innerHTML = `<div style="color: var(--critical);">Encounter ${encId} not found in log.</div>`;
+        }
+      } catch {
+        ack.innerHTML = `<div style="color: var(--critical);">Reconciliation request error.</div>`;
+      }
+    }
+
+    // DLQ
+    async function fetchDLQEntries() {
+      const tbody = document.getElementById('dlq-tbody');
+      try {
+        const res = await fetch(`${API_BASE}/admin/dlq/messages`);
+        const list = await res.json();
+        if (!list || list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No DLQ records located.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = list.map(m => `
+          <tr>
+            <td><strong>${m.encounter_id}</strong></td>
+            <td style="font-family: var(--font-mono);">${m.pId}</td>
+            <td><span class="tag ${m.status === 'resolved' ? 'tag-routine' : 'tag-critical'}">${m.status}</span></td>
+            <td>${m.error_message}</td>
+            <td style="font-family: var(--font-mono); font-size: 0.75rem;">${new Date(m.failed_at).toLocaleTimeString()}</td>
+            <td>
+              <button class="btn btn-secondary btn-sm" onclick="redriveDLQ('${m.encounter_id}')">Re-drive</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--critical); padding: 1rem;">Failed to query DLQ.</td></tr>`;
+      }
+    }
+
+    async function redriveDLQ(encId) {
+      try {
+        const res = await fetch(`${API_BASE}/admin/dlq/retry/${encId}`, { method: 'POST' });
+        if (res.ok) {
+          toast(`Re-driven encounter ${encId}`);
+          fetchDLQEntries();
+        } else {
+          toast('Re-drive attempt failed', false);
+        }
+      } catch {
+        toast('Connection error', false);
+      }
+    }
+
+    // FHIR
+    async function openFHIRModal() {
+      const encId = document.getElementById('query-id').value.trim();
+      try {
+        const res = await fetch(`${API_BASE}/encounters/${encId}/fhir`);
+        if (res.ok) {
+          const bundle = await res.json();
+          document.getElementById('fhir-code-view').innerText = JSON.stringify(bundle, null, 2);
+          document.getElementById('fhir-modal').classList.add('open');
+        } else {
+          toast('FHIR export failed', false);
+        }
+      } catch {
+        toast('FHIR connection error', false);
+      }
+    }
+
+    // Simulation
+    async function dispatchSimulation(mode) {
+      const num = parseInt(document.getElementById('sim-enc-count').value);
+      const ver = parseInt(document.getElementById('sim-ver-count').value);
+      const url = mode === 'kafka' ? `${STREAMER_BASE}/stream/kafka/start` : `${STREAMER_BASE}/stream/start`;
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            num_encounters: num,
+            events_per_encounter: ver,
+            duplicate_probability: 0.2,
+            out_of_order_probability: 0.25,
+            delay_ms: 200
+          })
+        });
+        const d = await res.json();
+        toast(`Dispatched ${d.total_events_generated} synthetic partner events`);
+      } catch {
+        toast('Streamer service unreachable (port 8001)', false);
+      }
+    }
+
+    // Initial Ping
+    checkSystemHealth();
+  </script>
+</body>
+</html>
