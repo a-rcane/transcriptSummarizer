@@ -177,7 +177,7 @@ encounter_service  | INFO:     Application startup complete.
 
 ---
 
-## 6. How to Use & Test the System
+## 6. Setup
 
 ### Option A: Use the Clinical Web Workstation (Easiest)
 
