@@ -6,6 +6,7 @@ from .summary import (
     HumanOverrideRequest, ConfidenceBreakdown, ReconciliationResponse, FeedbackMetricsResponse
 )
 from .dlq import DLQMessageRecord, DLQStatsResponse
+from .outbox import OutboxRecord
 
 __all__ = [
     "EncounterEventInput",
@@ -29,4 +30,5 @@ __all__ = [
     "FeedbackMetricsResponse",
     "DLQMessageRecord",
     "DLQStatsResponse",
+    "OutboxRecord",
 ]

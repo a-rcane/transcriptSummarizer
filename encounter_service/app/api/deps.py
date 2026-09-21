@@ -1,6 +1,7 @@
 from fastapi import Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from ..repositories.mongo import get_database
+from ..repositories.outbox_repository import OutboxRepository
 from ..repositories.event_repository import EventRepository
 from ..repositories.encounter_repository import EncounterRepository
 from ..repositories.patient_repository import PatientRepository
@@ -24,6 +25,11 @@ def get_event_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> Ev
 def get_encounter_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> EncounterRepository:
     """Dependency provider for EncounterRepository."""
     return EncounterRepository(db)
+
+
+def get_outbox_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> OutboxRepository:
+    """Dependency provider for OutboxRepository."""
+    return OutboxRepository(db)
 
 
 def get_patient_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> PatientRepository:
@@ -52,10 +58,12 @@ def get_redis_client() -> RedisClient:
 def get_ingest_service(
     event_repo: EventRepository = Depends(get_event_repository),
     encounter_repo: EncounterRepository = Depends(get_encounter_repository),
-    kafka_producer: KafkaEventProducer = Depends(get_kafka_producer)
+    kafka_producer: KafkaEventProducer = Depends(get_kafka_producer),
+    outbox_repo: OutboxRepository = Depends(get_outbox_repository)
 ) -> IngestService:
     """Dependency provider for IngestService."""
-    return IngestService(event_repo, encounter_repo, kafka_producer)
+    return IngestService(event_repo, encounter_repo, kafka_producer, outbox_repo)
+
 
 
 def get_summarize_service(

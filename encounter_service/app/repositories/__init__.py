@@ -3,6 +3,7 @@ from .event_repository import EventRepository
 from .encounter_repository import EncounterRepository
 from .patient_repository import PatientRepository
 from .dlq_repository import DLQRepository
+from .outbox_repository import OutboxRepository
 
 __all__ = [
     "MongoDB",
@@ -11,4 +12,5 @@ __all__ = [
     "EncounterRepository",
     "PatientRepository",
     "DLQRepository",
+    "OutboxRepository",
 ]

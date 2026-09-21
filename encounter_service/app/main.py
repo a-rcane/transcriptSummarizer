@@ -13,15 +13,17 @@ from .repositories.encounter_repository import EncounterRepository
 from .repositories.patient_repository import PatientRepository
 from .repositories.event_repository import EventRepository
 from .repositories.dlq_repository import DLQRepository
+from .repositories.outbox_repository import OutboxRepository
 from .clients.ai_client import UnifiedAIClient
 from .services.summarize_service import SummarizeService
+from .services.outbox_sweeper import OutboxSweeper
 from .messaging.kafka_consumer import KafkaSummarizationConsumer
 from .api.deps import _kafka_producer, _redis_client, _ai_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: MongoDB, Kafka Producer, Redis, Kafka Consumer Worker
+    # Startup: MongoDB, Kafka Producer, Redis, Kafka Consumer Worker, Outbox Sweeper
     try:
         await MongoDB.connect_to_database()
         print("[Startup] MongoDB connected and indexed.")
@@ -41,25 +43,38 @@ async def lifespan(app: FastAPI):
 
     consumer = None
     consumer_task = None
+    sweeper = None
     try:
         if MongoDB.db is not None:
             dlq_repo = DLQRepository(MongoDB.db)
+            event_repo = EventRepository(MongoDB.db)
+            outbox_repo = OutboxRepository(MongoDB.db)
+
             summarize_service = SummarizeService(
                 encounter_repo=EncounterRepository(MongoDB.db),
                 patient_repo=PatientRepository(MongoDB.db),
-                event_repo=EventRepository(MongoDB.db),
+                event_repo=event_repo,
                 ai_client=_ai_client,
                 cache_client=_redis_client,
                 dlq_repo=dlq_repo
             )
             consumer = KafkaSummarizationConsumer()
             consumer_task = asyncio.create_task(consumer.start(summarize_service, dlq_repo))
+
+            sweeper = OutboxSweeper(
+                outbox_repo=outbox_repo,
+                kafka_producer=_kafka_producer,
+                event_repo=event_repo
+            )
+            await sweeper.start()
     except Exception as e:
-        print(f"[Startup Warning] Kafka consumer worker init failed: {e}")
+        print(f"[Startup Warning] Kafka consumer or sweeper worker init failed: {e}")
 
     yield
 
     # Shutdown: Clean up connections and workers
+    if sweeper:
+        await sweeper.stop()
     if consumer:
         await consumer.stop()
     if consumer_task:
@@ -83,6 +98,7 @@ async def lifespan(app: FastAPI):
         await MongoDB.close_database_connection()
     except Exception:
         pass
+
 
 
 app = FastAPI(

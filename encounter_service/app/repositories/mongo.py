@@ -27,6 +27,8 @@ class MongoDB:
         # 5. DLQ indexes
         await cls.db["dlq_messages"].create_index([("encounter_id", ASCENDING)])
         await cls.db["dlq_messages"].create_index([("status", ASCENDING), ("failed_at", DESCENDING)])
+        # 6. Outbox indexes
+        await cls.db["outbox_events"].create_index([("status", ASCENDING), ("created_at", ASCENDING)])
 
     @classmethod
     async def close_database_connection(cls) -> None:
