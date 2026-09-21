@@ -108,11 +108,11 @@ class KafkaSummarizationConsumer:
             transcription = payload.get("transcriptions") or payload.get("transcription", "")
 
             # Process with 3-step exponential backoff retry
-            success = await self._process_with_retry(service, encounter_id, pid, transcription)
+            success = await self._process_with_retry(service, encounter_id, pid, transcription, version=version)
 
             if not success:
                 # Route to Dead-Letter Queue (DLQ)
-                print(f"[Kafka DLQ] Moving encounter {encounter_id} to DLQ '{self.dlq_topic}'")
+                print(f"[Kafka DLQ] Moving encounter {encounter_id} v{version} to DLQ '{self.dlq_topic}'")
                 if self.dlq_producer:
                     self.dlq_producer.produce(self.dlq_topic, key=msg.key(), value=msg.value())
                     self.dlq_producer.poll(0)
@@ -145,15 +145,16 @@ class KafkaSummarizationConsumer:
         enc_id: str,
         pid: str,
         transcription: str,
+        version: int = 1,
         retries: int = 3
     ) -> bool:
         for attempt in range(retries):
             try:
-                await service.summarize_encounter(enc_id, pid, transcription)
+                await service.summarize_encounter(enc_id, pid, transcription, version=version)
                 return True
             except Exception as err:
                 delay = 2 ** attempt  # 1s, 2s, 4s
-                print(f"[Retry {attempt + 1}/{retries}] Encounter {enc_id} failed: {err}. Retrying in {delay}s...")
+                print(f"[Retry {attempt + 1}/{retries}] Encounter {enc_id} v{version} failed: {err}. Retrying in {delay}s...")
                 await asyncio.sleep(delay)
         return False
 

@@ -41,6 +41,7 @@ class EncounterEntity(BaseModel):
     encounter_id: str = Field(..., description="Unique Encounter ID")
     pId: str = Field(..., description="Patient ID")
     latest_version: int = Field(..., description="Highest version number processed so far")
+    summary_version: int = Field(default=0, description="Highest version number whose summary has been applied")
     transcriptions: str = Field(..., description="Latest transcription content")
     encounter_type: Optional[EncounterType] = None
     summary: Optional[str] = None
@@ -66,4 +67,7 @@ class EncounterVersionLog(BaseModel):
     pId: str
     version: int
     transcription: str
+    summary_status: str = Field(default="PENDING", description="'PENDING', 'SUMMARIZED', 'OBSOLETE', 'FAILED', 'SLA_BREACH_RETRYING'")
+    summary_text: Optional[str] = None
     received_at: datetime = Field(default_factory=datetime.utcnow)
+    processed_at: Optional[datetime] = None

@@ -41,6 +41,7 @@ class EncounterRepository:
                     },
                     "$setOnInsert": {
                         "created_at": now,
+                        "summary_version": 0,
                         "encounter_type": encounter.encounter_type,
                         "summary": encounter.summary,
                         "ai_generated_summary": encounter.summary,
@@ -59,13 +60,19 @@ class EncounterRepository:
         self,
         encounter_id: str,
         summary: str,
+        job_version: int = 1,
         encounter_type: Optional[str] = None,
         confidence_score: float = 1.0,
         confidence_breakdown: Optional[Dict[str, float]] = None,
         urgency_level: UrgencyLevel = UrgencyLevel.ROUTINE,
         needs_human_review: bool = False
     ) -> bool:
+        """
+        Atomically updates the current summary ONLY IF job_version > current summary_version.
+        Returns True if the summary was applied (won the race), or False if obsolete (e.g. v13 already applied before v12).
+        """
         update_fields = {
+            "summary_version": job_version,
             "summary": summary,
             "ai_generated_summary": summary,
             "encounter_type": encounter_type,
@@ -77,8 +84,15 @@ class EncounterRepository:
         if confidence_breakdown:
             update_fields["confidence_breakdown"] = confidence_breakdown
 
+        # ATOMIC CAS: Only update if summary_version < job_version (or doesn't exist yet)
         result = await self.collection.update_one(
-            {"encounter_id": encounter_id},
+            {
+                "encounter_id": encounter_id,
+                "$or": [
+                    {"summary_version": {"$lt": job_version}},
+                    {"summary_version": {"$exists": False}}
+                ]
+            },
             {"$set": update_fields}
         )
         return result.modified_count > 0

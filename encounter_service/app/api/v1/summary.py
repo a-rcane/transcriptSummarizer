@@ -11,10 +11,12 @@ from ...models.fhir_converter import FHIRConverter
 from ...clients.ai_client import UnifiedAIClient
 from ...repositories.encounter_repository import EncounterRepository
 from ...repositories.dlq_repository import DLQRepository
-from ..deps import get_summarize_service, get_encounter_repository, get_ai_client, get_dlq_repository
+from ...repositories.event_repository import EventRepository
+from ..deps import get_summarize_service, get_encounter_repository, get_ai_client, get_dlq_repository, get_event_repository
 from ...services.summarize_service import SummarizeService
 
 router = APIRouter()
+
 
 
 @router.get(
@@ -208,3 +210,36 @@ async def stream_encounter_summary(
             yield f"data: {token}\n\n"
         yield "data: [DONE]\n\n"
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get(
+    "/encounters/{encounter_id}/versions/{version}/status",
+    summary="Get exact-version summary processing status and text"
+)
+async def get_version_summary_status(
+    encounter_id: str,
+    version: int,
+    event_repo: EventRepository = Depends(get_event_repository)
+):
+    """
+    Returns exact-version summary status:
+    - PENDING: In transit / processing
+    - SUMMARIZED: Applied as current summary
+    - OBSOLETE: Completed after a newer version was already applied (discarded from current state)
+    - FAILED: Encountered error / moved to DLQ
+    """
+    event = await event_repo.get_event_by_version(encounter_id, version)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Version {version} for encounter {encounter_id} not found."
+        )
+    return {
+        "encounter_id": encounter_id,
+        "pId": event.pId,
+        "version": event.version,
+        "summary_status": event.summary_status,
+        "summary_text": event.summary_text,
+        "received_at": event.received_at,
+        "processed_at": event.processed_at
+    }

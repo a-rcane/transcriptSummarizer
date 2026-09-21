@@ -31,11 +31,21 @@ class SummarizeService:
         self.cache = cache_client
         self.dlq_repo = dlq_repo
 
-    async def summarize_encounter(self, encounter_id: str, pId: str, transcription: str) -> SummaryOutput:
+    async def summarize_encounter(
+        self,
+        encounter_id: str,
+        pId: str,
+        transcription: str,
+        version: int = 1
+    ) -> Optional[SummaryOutput]:
         # 1. Out-of-Order Full Re-aggregation
         all_events = await self.event_repo.get_all_versions_for_encounter(encounter_id)
         if all_events and len(all_events) > 1:
-            full_transcription = "\n".join([f"[v{e.version}]: {e.transcription}" for e in all_events])
+            events_up_to_version = [e for e in all_events if e.version <= version]
+            if events_up_to_version:
+                full_transcription = "\n".join([f"[v{e.version}]: {e.transcription}" for e in events_up_to_version])
+            else:
+                full_transcription = "\n".join([f"[v{e.version}]: {e.transcription}" for e in all_events])
         else:
             full_transcription = transcription
 
@@ -51,10 +61,11 @@ class SummarizeService:
 
         breakdown_dict = ai_result.confidence_breakdown.model_dump() if ai_result.confidence_breakdown else None
 
-        # 4. Update encounter document
-        await self.encounter_repo.update_summary(
+        # 4. Atomic CAS update (Scenario 1: Prevents late v12 from overwriting newer v13)
+        cas_success = await self.encounter_repo.update_summary(
             encounter_id=encounter_id,
             summary=ai_result.encounter_summary,
+            job_version=version,
             encounter_type=ai_result.encounter_type.value if hasattr(ai_result.encounter_type, "value") else str(ai_result.encounter_type),
             confidence_score=ai_result.confidence_score,
             confidence_breakdown=breakdown_dict,
@@ -62,25 +73,43 @@ class SummarizeService:
             needs_human_review=ai_result.needs_human_review
         )
 
-        # 5. Rolling longitudinal compression
-        encounter_tag = f"[Encounter {encounter_id} - {ai_result.encounter_type.value}]: {ai_result.encounter_summary}"
-        rolling_summary = f"{prev_summary}\n{encounter_tag}".strip() if prev_summary else encounter_tag
+        if cas_success:
+            # 5a. Mark this version as SUMMARIZED
+            await self.event_repo.update_event_summary_status(
+                encounter_id=encounter_id,
+                version=version,
+                status="SUMMARIZED",
+                summary_text=ai_result.encounter_summary
+            )
 
-        # 6. Save to PatientHistory (OCC)
-        patient_hist = PatientHistory(
-            pId=pId,
-            complete_summary=rolling_summary,
-            last_encounter_summary=ai_result.encounter_summary,
-            active_problems=ai_result.active_problems,
-            current_medications=ai_result.medications,
-            last_visit=ai_result.last_visit or datetime.utcnow()
-        )
-        await self.patient_repo.upsert_patient_history_occ(patient_hist)
+            # 5b. Rolling longitudinal compression (Only winning version modifies longitudinal record)
+            encounter_tag = f"[Encounter {encounter_id} - {ai_result.encounter_type.value}]: {ai_result.encounter_summary}"
+            rolling_summary = f"{prev_summary}\n{encounter_tag}".strip() if prev_summary else encounter_tag
 
-        # 7. Invalidate cached summaries so next read pulls fresh state
-        if self.cache:
-            await self.cache.delete(f"summary:encounter:{encounter_id}")
-            await self.cache.delete(f"summary:patient:{pId}")
+            # 6. Save to PatientHistory (OCC)
+            patient_hist = PatientHistory(
+                pId=pId,
+                complete_summary=rolling_summary,
+                last_encounter_summary=ai_result.encounter_summary,
+                active_problems=ai_result.active_problems,
+                current_medications=ai_result.medications,
+                last_visit=ai_result.last_visit or datetime.utcnow()
+            )
+            await self.patient_repo.upsert_patient_history_occ(patient_hist)
+
+            # 7. Invalidate cached summaries so next read pulls fresh state
+            if self.cache:
+                await self.cache.delete(f"summary:encounter:{encounter_id}")
+                await self.cache.delete(f"summary:patient:{pId}")
+        else:
+            # 8. Late or obsolete version: mark OBSOLETE in event log without corrupting state
+            await self.event_repo.update_event_summary_status(
+                encounter_id=encounter_id,
+                version=version,
+                status="OBSOLETE",
+                summary_text=ai_result.encounter_summary
+            )
+            print(f"[Summarize Service] Version {version} for encounter {encounter_id} marked OBSOLETE (superseded).")
 
         output = await self.get_summary_by_encounter_id(encounter_id)
         return output
@@ -219,11 +248,12 @@ class SummarizeService:
         all_events.sort(key=lambda e: e.version)
         latest_event = all_events[-1]
 
-        # Re-run full summarization
+        # Re-run full summarization with latest version
         updated_summary = await self.summarize_encounter(
             encounter_id=encounter_id,
             pId=encounter.pId,
-            transcription=latest_event.transcription
+            transcription=latest_event.transcription,
+            version=latest_event.version
         )
 
         return ReconciliationResponse(
@@ -255,11 +285,14 @@ class SummarizeService:
 
         payload = record.payload
         transcription = payload.get("transcriptions") or payload.get("transcription", "")
+        version = payload.get("version", record.version or 1)
         summary = await self.summarize_encounter(
             encounter_id=record.encounter_id,
             pId=record.pId,
-            transcription=transcription
+            transcription=transcription,
+            version=version
         )
 
         await self.dlq_repo.mark_resolved(encounter_id, notes="Successfully reprocessed via admin retry API")
         return summary
+
