@@ -212,7 +212,48 @@ Inside the workstation:
    - **`1. Webhook Ingestion`**: Test Version 1, Out-of-Order Version 3, Stale Version 2, and Duplicate suppression.
    - **`2. Summary & Patient Queries`**: Test Redis-cached lookups, FHIR bundle export, and SSE streaming.
    - **`3. Human-In-The-Loop & Operational Features`**: Test urgency filtering, physician override, diff history, feedback metrics, reconcile API, and DLQ retries.
-   - **`4. Event Streamer Microservice`**: Trigger automated HTTP or Kafka streaming runs.
-   - **`5. Health Checks`**: Verify both services are healthy (`/health`).
+    - **`4. Event Streamer Microservice`**: Trigger automated HTTP or Kafka streaming runs.
+    - **`5. Health Checks`**: Verify both services are healthy (`/health`).
+
+---
+
+## 7. Running Automated Tests
+
+The repository includes a dedicated automated test suite in [`encounter_service/tests/test_distributed_guarantees.py`](file:///c:/Users/sanch/PycharmProjects/transcriptSummarizer/encounter_service/tests/test_distributed_guarantees.py) that verifies the core distributed correctness guarantees.
+
+### Option A: Run Tests via Docker (Recommended)
+
+Run the test suite inside the running container:
+
+```bash
+docker compose exec encounter-service pytest tests/test_distributed_guarantees.py -v
+```
+
+To run all tests:
+```bash
+docker compose exec encounter-service pytest -v
+```
+
+---
+
+### Option B: Run Tests Locally
+
+If running outside Docker with a local Python 3.10+ virtual environment:
+
+```bash
+cd encounter_service
+pip install -r requirements.txt
+pytest tests/test_distributed_guarantees.py -v
+```
+
+---
+
+### Key Scenarios Covered in the Test Suite
+
+| Test Function | Scenario & Guarantee Verified |
+| :--- | :--- |
+| `test_late_v12_cannot_overwrite_newer_v13_summary` | **Async Race Protection (v12 vs v13):**<br>• $v13$ finishes first and atomically sets `summary_version = 13` (`SUMMARIZED`).<br>• Delayed $v12$ fails atomic CAS (`summary_version 13 >= 12`) and is marked **`OBSOLETE`**.<br>• Current chart summary remains $v13$, and longitudinal `PatientHistory` is **not** overwritten. |
+| `test_outbox_recovers_pending_records_after_service_crash` | **Transactional Outbox Crash Recovery:**<br>• Simulates a service crash between MongoDB write and Kafka publish.<br>• Verifies `OutboxSweeper` recovers orphaned `PENDING_DISPATCH` records, emits them to Kafka, and marks them **`DISPATCHED`**. |
+| `test_patient_identity_mismatch_rejected` | **Patient Identity Immutability Guard:**<br>• Attempts to send a new version for an existing encounter under a different `pId`.<br>• Verifies immediate rejection (`rejected_patient_mismatch`) with zero Kafka or Outbox mutations. |
 
 ---
